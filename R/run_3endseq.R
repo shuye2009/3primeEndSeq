@@ -9,7 +9,6 @@ factor <- args[2] # "gU2AF1", "gU170K", "gSF1"
 option <- args[3]  # global, peak, read, other
 
 if (Sys.info()[["sysname"]] == "Windows") {
-   source("C:/GREENBLATT/Rscripts/GenomicPlot_misc/R/misc_genomics_functions.R")
    resources <- setupProjects(genome="hg19", 
                               baseDir="C:/GREENBLATT",
                               overwrite = FALSE)
@@ -24,7 +23,7 @@ if (Sys.info()[["sysname"]] == "Windows") {
    scriptdir <- "~/R_script/3endseq"
 }
 
-
+source(file.path(scriptdir,"misc_genomics_functions.R"))
 source(file.path(scriptdir,"3endseq_lib.R"))
 source(file.path(scriptdir,"3endseq.R"))
 
