@@ -1,3 +1,4 @@
+# find files by regex
 match_samples <- function(path, pattern, samples, start=FALSE){
     
     queryfiles <- list.files(path=path, pattern=pattern)
@@ -14,7 +15,6 @@ match_samples <- function(path, pattern, samples, start=FALSE){
 
 
 ## define cluster of CS
-
 CS2peak <- function(CSgr, separatingDist = 75, addonDist = 5) {
     CSgr <- sortSeqlevels(CSgr)
     CSgrl <- split(CSgr, paste(seqnames(CSgr), strand(CSgr)))
@@ -36,6 +36,7 @@ CS2peak <- function(CSgr, separatingDist = 75, addonDist = 5) {
 
 
 ## cluster on each chromosome
+## based on Rot et al., 2017, Cell Reports 19, 1056–1067, May 2, 2017
 CS2peakChr <- function(CHRgr, separatingDist = 75, addonDist = 5) {
     if (length(CHRgr) == 0) {
         return(NULL)

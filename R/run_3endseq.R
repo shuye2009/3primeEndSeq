@@ -1,4 +1,4 @@
-## Nujhat ZNF281 3'end seq ####
+## Nujhat ZNF281 3'end seq 
 # 
 options(error=recover)
 parallel:::setDefaultClusterOptions(setup_strategy = "sequential")
@@ -27,12 +27,19 @@ source(file.path(scriptdir,"misc_genomics_functions.R"))
 source(file.path(scriptdir,"3endseq_lib.R"))
 source(file.path(scriptdir,"3endseq.R"))
 
-   
+  
+## Process single nucleotide resolution cleavage (CPA) sites and internal priming sites,
+## cluster CPA sites into consolidated CPA peaks,
+## Run Dexseq analysis to define shorteing and lengthening genes 
 if(option == "global"){
    outdir <- file.path(wd, "global")
    if(!dir.exists(outdir)) dir.create(outdir)
    
-   res <- process_global(indir, outdir, resources=resources)
+   if(file.exists(file.path(outdir, "res.RDS"))){
+      res <- readRDS(file.path("res.RDS"))
+   }else{
+      res <- process_global(indir, outdir, resources=resources)
+   }
       
    CScluster <- res[res$status=="kept"]
    
@@ -40,21 +47,27 @@ if(option == "global"){
    if(!dir.exists(outdir)) dir.create(outdir)
    sample_info <- paste0("sample_info_", factor, ".txt")
    
-   if(0){
-   cluster_res <- process_factor(indir=wd, outdir=outdir, factor=factor, metaData=sample_info, 
+   if(file.exists(file.path(outdir, "cluster_res.RDS"))){
+      cluster_res <- readRDS(file.path(outdir, "cluster_res.RDS"))
+   }else{
+      cluster_res <- process_factor(indir=wd, outdir=outdir, factor=factor, metaData=sample_info, 
                   resources=resources, CScluster=CScluster)
-
-
-   DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="3UTR", factor=factor)
-   DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="Intron", factor=factor)
-   DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="Transcript", factor=factor)
    }
+
+   if(!file.exists(file.path(outdir, "3UTR", "DEXSeq_results_annotated.tab")))
+      DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="3UTR", factor=factor)
+   if(!file.exists(file.path(outdir, "Intron", "DEXSeq_results_annotated.tab")))
+      DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="Intron", factor=factor)
+   if(!file.exists(file.path(outdir, "Transcript", "DEXSeq_results_annotated.tab")))
+      DEXSeq_analysis(cluster_res=cluster_res, outdir=outdir, feature="Transcript", factor=factor)
    
+   
+   if(!file.exists(file.path(outdir, "Transcript", "premature_CPA_annotated.tab")))
    intronic_CPA(file.path(outdir, "Transcript"), "DEXSeq_results_annotated.tab")
+   
 }
   
-#
-
+## Plot iCLIP peaks around proximal and distal cleavage sites
 if(option == "peak"){
    clipDir <- "C:/GREENBLATT/Nabeel/CLIP_peaks_Jun2024"
    # "U2AF1", "U1C", "SF3A1", "SF3B4",
@@ -64,6 +77,7 @@ if(option == "peak"){
    }
 }
 
+## Plot iCLIP reads around proximal and distal cleavage sites
 if(option == "read"){
    clipDir <- "C:/GREENBLATT/Nabeel/CLIP_bam_merged"
    # "U2AF1", "U1C", "SF3B4", 
@@ -208,6 +222,7 @@ if(option == "read"){
    }
 }
 
+## Plot iCLIP peaks with respect to genomic features
 if(option == "other"){
    clipDir <- "C:/GREENBLATT/Nabeel/CLIP_peaks_Jun2024"
    outDir = file.path(wd, "genomicplot")
@@ -216,14 +231,15 @@ if(option == "other"){
    for(factorName in c("U2AF1")){
       run_GenomicPlot_Intron(clipDir, outDir, clipFactors=factorName, 
                             txdb=resources$txdb)
-      #run_GenomicPlot_metagene(clipDir, outDir, clipFactors=factorName,
-      #                         metaFeature=resources$metaFeatures)
-      #run_GenomicPlot_peak_annotation(clipDir, outDir, clipFactors=factorName,
-      #                                gtfFile=resources$gtffile)
+      run_GenomicPlot_metagene(clipDir, outDir, clipFactors=factorName,
+                               metaFeature=resources$metaFeatures)
+      run_GenomicPlot_peak_annotation(clipDir, outDir, clipFactors=factorName,
+                                      gtfFile=resources$gtffile)
    }
    
 }
 
+## Plot distance between proximal and distal CPA sites for lengthening and shortenig genes
 if(option == "distance"){
     for(nc in c("noChange_", "noChangeS_", "noChangeL_")){
         distance_between_proximal_distal(wd, cleavageFactor=factor, 
@@ -233,5 +249,5 @@ if(option == "distance"){
 }
 
 
-# run in terminal
+# run in bash terminal
 # Rscript C:/GREENBLATT/Rscripts/3primeEndSeq/R/run_3endseq.R C:/GREENBLATT/Nujhat/3endseq/Jun04_2024 gU2AF1 read

@@ -4,202 +4,203 @@ process_factor <- function(indir, outdir, factor, metaData, resources, CScluster
    print("[process_factor] started ...")
    setwd(outdir)
    
-   if(file.exists("cluster_res.RDS")){
-      cluster_res <- readRDS("cluster_res.RDS")
+   
+   force(CScluster)
+   gtffile <- resources$gtffile
+   txdb <- resources$txdb
+   metaFeatures <- resources$metaFeatures
+   geneFeatures <- resources$geneFeatures
+   
+   PAS_strong <- c("AAUAAA", "AUUAAA")
+   PAS_weak <- c("AGUAAA", "UAUAAA", "CAUAAA", "GAUAAA", "AAUAUA", "AAUACA", "AAUAGA", "ACUAAA", "AAGAAA", "AAUGAA")
+   
+   sampleData <- read.delim(metaData) %>% 
+      dplyr::mutate_if(is.character, as.factor)
+   rownames(sampleData) <- sampleData$sample
+   sampleData <- sampleData[, -1]
+   
+   ### metagene plot ####
+   print("[process_factor] metagene plot ...")
+   CS_files <- match_samples(path=indir, pattern="_CS.bed", 
+                               samples=rownames(sampleData))
+   
+   importParams <- setImportParams(offset = 0, fix_width=0, 
+                                   fix_point="center", norm=FALSE, 
+                                   useScore=FALSE,
+                                   outRle=TRUE, useSizeFactor=FALSE, 
+                                   genome="hg19")
+   
+   op <- paste0(factor, "_3primeseq_CS_sites_5parts_metagene")
+   if(!file.exists(paste0(op, ".pdf")))
+   df <- plot_5parts_metagene(CS_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA, smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
+   
+   IP_files <- match_samples(path=indir, pattern="_IP.bed", 
+                             samples=rownames(sampleData))
+
+   
+   op <- paste0(factor, "_3primeseq_IP_sites_5parts_metagene")
+   if(!file.exists(paste0(op, ".pdf")))
+   df <- plot_5parts_metagene(IP_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA,  smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
+   
+   
+   ### count polyT length ####
+   print("[process_factor] counting polyT length ...")
+   fas <- match_samples(path=indir, pattern="_filtered_flankL20.fa",
+                     samples=rownames(sampleData))
+   
+   noT <- match_samples(path=indir, pattern="_noT.fa",
+                        samples=rownames(sampleData))
+   
+   if(!file.exists("Occurance_of_G_upstream20.pdf")){
+      for(ch in c("A", "C", "G")){
+         pdf(paste0("Occurance_of_",ch,"_upstream20.pdf"))
+         opar <- par(mfrow=c(2,2))
+         
+         for (i in 1:length(fas)){
+            fa <- fas[i]
+            character_occurance_fasta(fa, ch)
+         }
+         dev.off()
+         par(opar)
+         
+         
+         pdf(paste0("Occurance_of_no",ch,"_upstream20.pdf"))
+         opar <- par(mfrow=c(2,2))
+         
+         for (i in 1:length(noT)){
+            fa <- noT[i]
+            character_occurance_fasta(fa, ch)
+         }
+         dev.off()
+         par(opar)
+      }
+   }
+   
+   
+   ### overlap merged with individuals CS.bed ####
+   print("[process_factor] overlap CS with CS clusters ...")
+   importParams <- setImportParams(offset = 0, fix_width=0, 
+                                   fix_point="center", norm=FALSE, 
+                                   useScore=FALSE,
+                                   outRle=FALSE, useSizeFactor=FALSE, 
+                                   genome="hg19")
+   if(!file.exists("CS_gr.RDS")){
+      cl <- start_parallel(nc=length(CS_files))
+      clusterExport(cl, varlist=c("handle_bed", "seqlevelsStyle"))
+      CS_list <- parLapply(cl, names(CS_files), function(x) handle_bed(CS_files[x], importParams = importParams))
+      CS_gr_list <- lapply(CS_list, function(x)x$query)
+      stop_parallel(cl)
+      
+      saveRDS(CS_gr_list, "CS_gr.RDS")
    }else{
-      force(CScluster)
-      gtffile <- resources$gtffile
-      txdb <- resources$txdb
-      metaFeatures <- resources$metaFeatures
-      geneFeatures <- resources$geneFeatures
+      CS_gr_list <- readRDS("CS_gr.RDS")
+   }
+   
+   if(!file.exists("overlap_gr.RDS")){
+      cl <- start_parallel(nc=length(CS_gr_list))
+      clusterExport(cl, varlist=c("CScluster"))
+      overlap_list <- parLapply(cl, CS_gr_list, function(x) {
+         GenomicRanges::countOverlaps(subject=x, query=CScluster)})
+      stop_parallel(cl)
       
-      PAS_strong <- c("AAUAAA", "AUUAAA")
-      PAS_weak <- c("AGUAAA", "UAUAAA", "CAUAAA", "GAUAAA", "AAUAUA", "AAUACA", "AAUAGA", "ACUAAA", "AAGAAA", "AAUGAA")
-      
-      sampleData <- read.delim(metaData) %>% 
-         dplyr::mutate_if(is.character, as.factor)
-      rownames(sampleData) <- sampleData$sample
-      sampleData <- sampleData[, -1]
-      
-      ### metagene plot ####
-      print("[process_factor] metagene plot ...")
-      CS_files <- match_samples(path=indir, pattern="_CS.bed", 
-                                  samples=rownames(sampleData))
-      
-      importParams <- setImportParams(offset = 0, fix_width=0, 
-                                      fix_point="center", norm=FALSE, 
-                                      useScore=FALSE,
-                                      outRle=TRUE, useSizeFactor=FALSE, 
-                                      genome="hg19")
-      
-      op <- paste0(factor, "_3primeseq_CS_sites_5parts_metagene")
-      if(!file.exists(paste0(op, ".pdf")))
-      df <- plot_5parts_metagene(CS_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA, smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
-      
-      IP_files <- match_samples(path=indir, pattern="_IP.bed", 
-                                samples=rownames(sampleData))
+      saveRDS(overlap_list, "overlap_gr.RDS")
+   }else{
+      overlap_list <- readRDS("overlap_gr.RDS")
+   }
+   
+   names(overlap_list) <- names(CS_files)
+   overlap_mat <- bind_cols(overlap_list)
+   
+   
+   pdf("sample_correlation_plot.pdf")
+   #DescTools::PlotPairs(log10(overlap_mat+1))
+   limma::plotMDS(log10(overlap_mat+1))
+   print(pheatmap(cor(overlap_mat)))
+   dev.off()
+   
+   
+   mcols(CScluster) <- cbind(mcols(CScluster), overlap_mat)
+   CScluster <- detect_PAS_signal(BSgenome.Hsapiens.UCSC.hg19, CScluster, upstream=50)
+   
+   pdf("cluster_width_readCounts_plot.pdf")
+   print(plot(x=width(CScluster), y=CScluster$score, xlab="Cluster_width", ylab="Read_count", log="y"))
+   print(hist(log10(CScluster$score)))
+   print(hist(width(CScluster)))
+   
+   dev.off()
+   
+   cluster_out <- gr2df(CScluster)
+   colnames(cluster_out)[1] <- "#chr"
+   write.table(cluster_out, "cluster_read_counts.bed", 
+               sep="\t", row.names=FALSE, quote=FALSE)
+   
+   
+   cluster_file <- "cluster_read_counts.bed"
+   names(cluster_file) <- "cluster"
+   
+   if(!file.exists("cluster_annotation.pdf"))
+   annot <- plot_peak_annotation(cluster_file, gtffile, importParams=importParams, fiveP=0, threeP=5000, outPrefix = "cluster_annotation", verbose=TRUE)
+   
+   ## associate cluster with genes
+   cluster_out <- read.table(cluster_file, header=TRUE,  comment.char = "",)
+   colnames(cluster_out)[1] <- "chr"
+   cluster_out <- cluster_out %>% arrange(chr, start, strand)
+   
+   annotation_file <- "cluster_peak_annotations.tab"
+   cluster_tx_association <- read.table(annotation_file, header=TRUE)
+   
+   ## if a peak is associated with multiple genes (transcripts), select only one arbitrarily
+   cluster_tx_association <- cluster_tx_association[!duplicated(cluster_tx_association$idPeak),] 
+   
+   gene_annotation_file <- "cluster_targeted_annotated_gene.tab"
+   tx_gene_association <- read.table(gene_annotation_file, header=TRUE)
+   
+   pdf("histogram_of_number_of_CS_in_3UTRIntron.pdf", width=10, height=6)
+   
+   p1 <- ggplot(tx_gene_association, aes(x=X3.UTR)) +
+      geom_histogram(position="identity", bins=max(tx_gene_association$X3.UTR), fill="red4", color="black") +
+      ggtitle("Cleavage sites in 3'UTR") +
+      xlab("Number of cleavage sites") +
+      ylab("Number of genes") +
+      theme_classic()
+   p2 <- ggplot(tx_gene_association, aes(x=TTS)) +
+      geom_histogram(position="identity", bins=max(tx_gene_association$TTS), fill="red4", color="black") +
+      ggtitle("Cleavage sites in TTS") +
+      xlab("Number of cleavage sites") +
+      ylab("Number of genes") +
+      theme_classic()
+   p3 <- ggplot(tx_gene_association, aes(x=Intron)) +
+      geom_histogram(position="identity", bins=max(tx_gene_association$Intron), fill="red", color="black") +
+      ggtitle("Cleavage sites in Intron") +
+      xlab("Number of cleavage sites") +
+      ylab("Number of genes") +
+      theme_classic()
+   print(plot_grid(p1,p2,p3, nrow=1))
+   
+   dev.off()
+   
+   
+   cluster_tx_association <- cluster_tx_association %>%
+      select(c(chrPeak, startPeak, endPeak, strandPeak, tx_name, feature_name)) %>%
+      rename(chr=chrPeak, start=startPeak, end=endPeak, strand=strandPeak) %>%
+      distinct() %>%
+      arrange(chr, start, strand) %>%
+      mutate(start=start+1)
    
       
-      op <- paste0(factor, "_3primeseq_IP_sites_5parts_metagene")
-      if(!file.exists(paste0(op, ".pdf")))
-      df <- plot_5parts_metagene(IP_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA,  smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
-      
-      
-      ### count polyT length ####
-      print("[process_factor] counting polyT length ...")
-      fas <- match_samples(path=indir, pattern="_filtered_flankL20.fa",
-                        samples=rownames(sampleData))
-      
-      noT <- match_samples(path=indir, pattern="_noT.fa",
-                           samples=rownames(sampleData))
-      
-      if(!file.exists("Occurance_of_G_upstream20.pdf")){
-         for(ch in c("A", "C", "G")){
-            pdf(paste0("Occurance_of_",ch,"_upstream20.pdf"))
-            opar <- par(mfrow=c(2,2))
-            
-            for (i in 1:length(fas)){
-               fa <- fas[i]
-               character_occurance_fasta(fa, ch)
-            }
-            dev.off()
-            par(opar)
-            
-            
-            pdf(paste0("Occurance_of_no",ch,"_upstream20.pdf"))
-            opar <- par(mfrow=c(2,2))
-            
-            for (i in 1:length(noT)){
-               fa <- noT[i]
-               character_occurance_fasta(fa, ch)
-            }
-            dev.off()
-            par(opar)
-         }
-      }
-      
-      
-      ### overlap merged with individuals CS.bed ####
-      print("[process_factor] overlap CS with CS clusters ...")
-      importParams <- setImportParams(offset = 0, fix_width=0, 
-                                      fix_point="center", norm=FALSE, 
-                                      useScore=FALSE,
-                                      outRle=FALSE, useSizeFactor=FALSE, 
-                                      genome="hg19")
-      if(!file.exists("CS_gr.RDS")){
-         cl <- start_parallel(nc=length(CS_files))
-         clusterExport(cl, varlist=c("handle_bed", "seqlevelsStyle"))
-         CS_list <- parLapply(cl, names(CS_files), function(x) handle_bed(CS_files[x], importParams = importParams))
-         CS_gr_list <- lapply(CS_list, function(x)x$query)
-         stop_parallel(cl)
-         
-         saveRDS(CS_gr_list, "CS_gr.RDS")
-      }else{
-         CS_gr_list <- readRDS("CS_gr.RDS")
-      }
-      
-      if(!file.exists("overlap_gr.RDS")){
-         cl <- start_parallel(nc=length(CS_gr_list))
-         clusterExport(cl, varlist=c("CScluster"))
-         overlap_list <- parLapply(cl, CS_gr_list, function(x) {
-            GenomicRanges::countOverlaps(subject=x, query=CScluster)})
-         stop_parallel(cl)
-         
-         saveRDS(overlap_list, "overlap_gr.RDS")
-      }else{
-         overlap_list <- readRDS("overlap_gr.RDS")
-      }
-      
-      names(overlap_list) <- names(CS_files)
-      overlap_mat <- bind_cols(overlap_list)
-      
-      
-      pdf("sample_correlation_plot.pdf")
-      #DescTools::PlotPairs(log10(overlap_mat+1))
-      limma::plotMDS(log10(overlap_mat+1))
-      print(pheatmap(cor(overlap_mat)))
-      dev.off()
-      
-      
-      mcols(CScluster) <- cbind(mcols(CScluster), overlap_mat)
-      CScluster <- detect_PAS_signal(BSgenome.Hsapiens.UCSC.hg19, CScluster, upstream=50)
-      
-      pdf("cluster_width_readCounts_plot.pdf")
-      print(plot(x=width(CScluster), y=CScluster$score, xlab="Cluster_width", ylab="Read_count", log="y"))
-      print(hist(log10(CScluster$score)))
-      print(hist(width(CScluster)))
-      
-      dev.off()
-      
-      cluster_out <- gr2df(CScluster)
-      colnames(cluster_out)[1] <- "#chr"
-      write.table(cluster_out, "cluster_read_counts.bed", 
-                  sep="\t", row.names=FALSE, quote=FALSE)
-      
-      
-      cluster_file <- "cluster_read_counts.bed"
-      names(cluster_file) <- "cluster"
-      
-      if(!file.exists("cluster_annotation.pdf"))
-      annot <- plot_peak_annotation(cluster_file, gtffile, importParams=importParams, fiveP=0, threeP=5000, outPrefix = "cluster_annotation", verbose=TRUE)
-      
-      ## associate cluster with genes
-      cluster_out <- read.table(cluster_file, header=TRUE,  comment.char = "",)
-      colnames(cluster_out)[1] <- "chr"
-      cluster_out <- cluster_out %>% arrange(chr, start, strand)
-      
-      annotation_file <- "cluster_peak_annotations.tab"
-      cluster_tx_association <- read.table(annotation_file, header=TRUE)
-      
-      ## if a peak is associated with multiple genes (transcripts), select only one arbitrarily
-      cluster_tx_association <- cluster_tx_association[!duplicated(cluster_tx_association$idPeak),] 
-      
-      gene_annotation_file <- "cluster_targeted_annotated_gene.tab"
-      tx_gene_association <- read.table(gene_annotation_file, header=TRUE)
-      
-      pdf("histogram_of_number_of_CS_in_3UTRIntron.pdf", width=10, height=6)
-      
-      p1 <- ggplot(tx_gene_association, aes(x=X3.UTR)) +
-         geom_histogram(position="identity", bins=max(tx_gene_association$X3.UTR), fill="red4", color="black") +
-         ggtitle("Cleavage sites in 3'UTR") +
-         xlab("Number of cleavage sites") +
-         ylab("Number of genes") +
-         theme_classic()
-      p2 <- ggplot(tx_gene_association, aes(x=TTS)) +
-         geom_histogram(position="identity", bins=max(tx_gene_association$TTS), fill="red4", color="black") +
-         ggtitle("Cleavage sites in TTS") +
-         xlab("Number of cleavage sites") +
-         ylab("Number of genes") +
-         theme_classic()
-      p3 <- ggplot(tx_gene_association, aes(x=Intron)) +
-         geom_histogram(position="identity", bins=max(tx_gene_association$Intron), fill="red", color="black") +
-         ggtitle("Cleavage sites in Intron") +
-         xlab("Number of cleavage sites") +
-         ylab("Number of genes") +
-         theme_classic()
-      print(plot_grid(p1,p2,p3, nrow=1))
-      
-      dev.off()
-      
-      
-      cluster_tx_association <- cluster_tx_association %>%
-         select(c(chrPeak, startPeak, endPeak, strandPeak, tx_name, feature_name)) %>%
-         rename(chr=chrPeak, start=startPeak, end=endPeak, strand=strandPeak) %>%
-         distinct() %>%
-         arrange(chr, start, strand) %>%
-         mutate(start=start+1)
-      
-         
-      tx_cluster_count <- inner_join(cluster_out, cluster_tx_association)
-      
-      cluster_res <- list(count=tx_cluster_count, association=tx_gene_association,
-                          meta=sampleData)
-      saveRDS(cluster_res, "cluster_res.RDS")
-   }
+   tx_cluster_count <- inner_join(cluster_out, cluster_tx_association)
+   
+   cluster_res <- list(count=tx_cluster_count, association=tx_gene_association,
+                       meta=sampleData)
+   saveRDS(cluster_res, "cluster_res.RDS")
+   
    
    return(cluster_res)
 }
  
+# Differential analysis of usage of CPA sites between treat and control
+# Identifying proximal and distal CPA
+# Define shortening and lengtheing genes based statistical significance
 DEXSeq_analysis <- function(cluster_res, outdir, feature, factor){   
    tx_cluster_count <- cluster_res$count
    tx_gene_association <- cluster_res$association
@@ -377,84 +378,83 @@ DEXSeq_analysis <- function(cluster_res, outdir, feature, factor){
    message("[DEXseq analysis] finished ...")
 }
 
+# display raw cleavage sites and internal priming sites with respect to 3'UTR,
+# cluster raw cleavage sites into consolidated cleavage site peaks
 
 process_global <- function(indir, outdir, resources=resources){
    setwd(outdir)
    
-   if(file.exists("res.RDS")){
-      res <- readRDS("res.RDS")
-   }else{
-      gtffile <- resources$gtffile
-      txdb <- resources$txdb
-      metaFeatures <- resources$metaFeatures
-      geneFeatures <- resources$geneFeatures
+   gtffile <- resources$gtffile
+   txdb <- resources$txdb
+   metaFeatures <- resources$metaFeatures
+   geneFeatures <- resources$geneFeatures
+
+   # 'merged_CSs.bed' and merged_IPs.bed' are outputs of script on Rocky cluster:
+   # /home/greenblattlab/shuyepu/Nujhat/3endseq/scripts/3endseq_pipeline.sh
+   CS_file <- file.path(indir, "merged_CSs.bed")
+   names(CS_file) <- "SC_cluster"
+   IP_file <- file.path(indir, "merged_IPs.bed")
+   names(IP_file) <- "IP_cluster"
+   queryfiles <- c(CS_file, IP_file)
    
-      
-      CS_file <- file.path(indir, "merged_CSs.bed")
-      names(CS_file) <- "SC_cluster"
-      IP_file <- file.path(indir, "merged_IPs.bed")
-      names(IP_file) <- "IP_cluster"
-      queryfiles <- c(CS_file, IP_file)
-      
-      importParams <- setImportParams(offset=0, fix_width=0, fix_point="center", 
-                                      norm=FALSE, useScore=TRUE, outRle=TRUE,
-                                      useSizeFactor=FALSE, genome="hg19")
-      
-      op <- "3primeseq_merged_sites_5parts_metagene"
-      if(!file.exists(paste0(op, ".pdf")))
-      df <- plot_5parts_metagene(queryfiles, gFeatures_list=list("meta"=metaFeatures),
-                                 heatRange=NULL, inputFiles=NULL, scale=FALSE,
-                                 verbose=TRUE, transform=NA, smooth=TRUE, stranded=TRUE,
-                                 outPrefix=op, importParams=importParams, heatmap=TRUE,
-                                 rmOutlier=0, nc=5)
-      op <- "cluster_utr3_plots"
-      if(!file.exists(paste0(op, ".pdf")))
-      plot_start_end(queryFiles=queryfiles, inputFiles=NULL, centerFiles="utr3", 
-                     txdb=txdb, importParams = importParams, binSize=10, insert=0,
-                     verbose=FALSE, ext=c(-500, 200, -200, 500), 
-                     hl=c(-50, 50, -50, 50), stranded=TRUE, scale=FALSE, 
-                     smooth=FALSE, rmOutlier=0, outPrefix=op, 
-                     transform=NA, shade=TRUE, nc=5)
-      
-      importParams <- setImportParams(offset=0, fix_width=0, fix_point="center", 
-                                      norm=FALSE, useScore=TRUE, outRle=FALSE,
-                                      useSizeFactor=FALSE, genome="hg19")
-      
-      CSs <- handle_bed(CS_file, importParams = importParams)$query
-      IPs <- handle_bed(IP_file, importParams = importParams)$query
-      #IPs_in_3UTR <- filter_bed_by_genomicFeature(IP_file, "utr3", txdb, importParams)$query
-      
-      merged <- c(CSs)
-      merged <- sort(merged, decreasing=TRUE, by=~score)
-      merged$name <- seq_along(merged) ## merged is sorted by score in descending order on RC-cluster
-      
-      res <- CS2peak(merged, separatingDist=75, addonDist=5)
-      saveRDS(res, "res.RDS")
-     
-      CScluster <- res[res$status=="kept"]
-      eliminated <- res[res$status=="eliminated"]
-      added <- res[res$status=="added"]
-      res_df <- gr2df(res) %>%
-         mutate(score = log10(score))
-      
-      pdf("Read_counts_distribution.pdf", width=10, height=6)
-      p1 <- ggplot(res_df, aes(x=score, fill=status)) +
-         geom_density(position="identity", color="black", alpha=0.5) +
-         ggtitle("Density plot of read counts") +
-         xlab("log10 (read counts)") +
-         scale_fill_npg() +
-         ylab("Density") +
-         theme_classic()
-      
-      p2 <- draw_boxplot_by_factor(res_df, xc="status", yc="score", Ylab="log10 (read counts)", comp=list(c(1,2), c(1,3), c(2,3)), nf=1)
-      print(plot_grid(p1,p2, nrow=1, align="h", axis="tb"))
-      dev.off()
-      
-   }
+   importParams <- setImportParams(offset=0, fix_width=0, fix_point="center", 
+                                   norm=FALSE, useScore=TRUE, outRle=TRUE,
+                                   useSizeFactor=FALSE, genome="hg19")
+   
+   op <- "3primeseq_merged_sites_5parts_metagene"
+   if(!file.exists(paste0(op, ".pdf")))
+   df <- plot_5parts_metagene(queryfiles, gFeatures_list=list("meta"=metaFeatures),
+                              heatRange=NULL, inputFiles=NULL, scale=FALSE,
+                              verbose=TRUE, transform=NA, smooth=TRUE, stranded=TRUE,
+                              outPrefix=op, importParams=importParams, heatmap=TRUE,
+                              rmOutlier=0, nc=5)
+   op <- "cluster_utr3_plots"
+   if(!file.exists(paste0(op, ".pdf")))
+   plot_start_end(queryFiles=queryfiles, inputFiles=NULL, centerFiles="utr3", 
+                  txdb=txdb, importParams = importParams, binSize=10, insert=0,
+                  verbose=FALSE, ext=c(-500, 200, -200, 500), 
+                  hl=c(-50, 50, -50, 50), stranded=TRUE, scale=FALSE, 
+                  smooth=FALSE, rmOutlier=0, outPrefix=op, 
+                  transform=NA, shade=TRUE, nc=5)
+   
+   importParams <- setImportParams(offset=0, fix_width=0, fix_point="center", 
+                                   norm=FALSE, useScore=TRUE, outRle=FALSE,
+                                   useSizeFactor=FALSE, genome="hg19")
+   
+   CSs <- handle_bed(CS_file, importParams = importParams)$query
+   IPs <- handle_bed(IP_file, importParams = importParams)$query
+   #IPs_in_3UTR <- filter_bed_by_genomicFeature(IP_file, "utr3", txdb, importParams)$query
+   
+   merged <- c(CSs)
+   merged <- sort(merged, decreasing=TRUE, by=~score)
+   merged$name <- seq_along(merged) ## merged is sorted by score in descending order on Rocky cluster
+   
+   res <- CS2peak(merged, separatingDist=75, addonDist=5)
+   saveRDS(res, "res.RDS")
+  
+   CScluster <- res[res$status=="kept"]
+   eliminated <- res[res$status=="eliminated"]
+   added <- res[res$status=="added"]
+   res_df <- gr2df(res) %>%
+      mutate(score = log10(score))
+   
+   pdf("Read_counts_distribution.pdf", width=10, height=6)
+   p1 <- ggplot(res_df, aes(x=score, fill=status)) +
+      geom_density(position="identity", color="black", alpha=0.5) +
+      ggtitle("Density plot of read counts") +
+      xlab("log10 (read counts)") +
+      scale_fill_npg() +
+      ylab("Density") +
+      theme_classic()
+   
+   p2 <- GenomicPlot::draw_boxplot_by_factor(res_df, xc="status", yc="score", Ylab="log10 (read counts)", comp=list(c(1,2), c(1,3), c(2,3)), nf=1)
+   print(plot_grid(p1,p2, nrow=1, align="h", axis="tb"))
+   dev.off()
    
    return(res)
 }
 
+# Plot iCLIP peaks around priximal and distal CPA sites of shortening and lengthening genes
 integrate_3endseq_with_iCLIP <- function(clipDir, wd, clipFactor = "U2AF1", 
                                          cleavageFactor="gU2AF1", feature="3UTR"){
    clipbed <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactor)
@@ -506,6 +506,7 @@ integrate_3endseq_with_iCLIP <- function(clipDir, wd, clipFactor = "U2AF1",
    }
 }
 
+# Plot iCLIP reads around priximal and distal CPA sites of shortening and lengthening genes
 integrate_3endseq_with_iCLIP_bam <- function(clipDir, wd, clipFactor = "U2AF1", 
                                          cleavageFactor="gU2AF1", feature="3UTR",
                                          lh_list, ext_list){
@@ -601,6 +602,8 @@ integrate_3endseq_with_iCLIP_bam <- function(clipDir, wd, clipFactor = "U2AF1",
        }
     }
 }
+
+#Plot iCLIP peaks with respect to intron
 run_GenomicPlot_Intron <- function(clipDir, outDir, clipFactors, txdb){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", 
                               samples=clipFactors, start = FALSE)
@@ -635,6 +638,7 @@ run_GenomicPlot_Intron <- function(clipDir, outDir, clipFactors, txdb){
    
 }
 
+#Plot iCLIP peaks with respect to gene features other than intron
 run_GenomicPlot_metagene <- function(clipDir, outDir, clipFactors, metaFeature){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactors)
    names(peakfiles) <- clipFactors
@@ -662,6 +666,7 @@ run_GenomicPlot_metagene <- function(clipDir, outDir, clipFactors, metaFeature){
    )
 }
 
+#Plot iCLIP peaks annotation statistics
 run_GenomicPlot_peak_annotation <- function(clipDir, outDir, clipFactors, gtfFile){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactors)
    names(peakfiles) <- clipFactors
@@ -684,7 +689,7 @@ run_GenomicPlot_peak_annotation <- function(clipDir, outDir, clipFactors, gtfFil
    )
 }
 
-
+# quantitate distance between proximal and distal CPA sites in shortening and lengthening genes
 distance_between_proximal_distal <- function(wd, cleavageFactor="gU2AF1", 
                                              feature="3UTR", nc="noChange_"){
     setwd(file.path(wd, cleavageFactor, feature, "bed_output"))
@@ -728,7 +733,7 @@ distance_between_proximal_distal <- function(wd, cleavageFactor="gU2AF1",
         geom_density() +
         theme_classic()
     
-    p2 <- draw_combo_plot(distance_df,
+    p2 <- GenomicPlot::draw_combo_plot(distance_df,
                           xc = "APA", 
                           yc = "Log10_Distance",
                           Xlab = "APA",
