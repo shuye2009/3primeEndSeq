@@ -80,7 +80,7 @@ CS2peakChr <- function(CHRgr, separatingDist = 75, addonDist = 5) {
     return(CHRgr)
 }
 
-#CSbed <- "C:/GREENBLATT/Nujhat/3endseq/Dec21_2022/merged_CSs.bed"
+#Plot CS width distribution as a histogram
 explore_CS <- function(CSbed) {
     cs_df <- read.delim(CSbed, header = FALSE)
     colnames(cs_df) <- c("chr", "start", "end", "id", "score", "strand")
@@ -93,6 +93,7 @@ explore_CS <- function(CSbed) {
 
 # fa <- "C:/GREENBLATT/Nujhat/3endseq/Dec21_2022/Greenblatt_001_Plate_1_Strip_1_A01_siNT_1_S1_filtered_flankL20.fa"
 # ch <- "T"
+# Plot occurrence of each nucleotide in the vicinity of CS sites
 character_occurance_fasta <- function(fa, ch) {
     library(stringr)
     library(seqinr)
@@ -152,6 +153,7 @@ cal_RCE <- function(count_df, ctl_col, exp_col, RCE_cutoff = 0.02) {
     invisible(res)
 }
 
+# determine proximal/distal pair and determine shortening/lengthening for Fisher method and Dexseq method
 UTR_change <- function(df, gene_col = "gene_name", start_col = "start", strand_col = "strand", sorting_col = "RCE_mean", padj_col = "fisherPadj", direction_col = "RCE_foldChange", padj_cutoff = 0.1, norm = 1) {
     genes <- unique(df[[gene_col]])
     
@@ -246,54 +248,6 @@ UTR_change <- function(df, gene_col = "gene_name", start_col = "start", strand_c
                     }
                 }
             }
-            
-            if (0) {
-                if (gene_df[1, padj_col] < padj_cutoff && gene_df[1, direction_col] < norm) {
-                    for (i in 2:nrow(gene_df)) {
-                        if (gene_df[i, direction_col] > norm) {
-                            if (strand == "-") {
-                                change <- ifelse(start < gene_df[i, start_col], "shortening", "lengthening")
-                            } else {
-                                change <- ifelse(start < gene_df[i, start_col], "lengthening", "shortening")
-                            }
-                            break
-                        }
-                    }
-                } else if (gene_df[1, padj_col] < padj_cutoff && gene_df[1, direction_col] > norm) {
-                    for (i in 2:nrow(gene_df)) {
-                        if (gene_df[i, direction_col] < norm) {
-                            if (strand == "-") {
-                                change <- ifelse(start < gene_df[i, start_col], "lengthening", "shortening")
-                            } else {
-                                change <- ifelse(start < gene_df[i, start_col], "shortening", "lengthening")
-                            }
-                            break
-                        }
-                    }
-                } else if (gene_df[1, padj_col] >= padj_cutoff) {
-                    max_fc <- max(gene_df[, direction_col])
-                    min_fc <- min(gene_df[, direction_col])
-                    start_min <- min(gene_df[gene_df[, direction_col] == min_fc, start_col])
-                    start_max <- min(gene_df[gene_df[, direction_col] == max_fc, start_col])
-                    for (i in 2:nrow(gene_df)) {
-                        if (gene_df[i, padj_col] < padj_cutoff && gene_df[i, direction_col] < norm) {
-                            if (strand == "-") {
-                                change <- ifelse(start_max < gene_df[i, start_col], "lengthening", "shortening")
-                            } else {
-                                change <- ifelse(start_max < gene_df[i, start_col], "shortening", "lengthening")
-                            }
-                            break
-                        } else if (gene_df[i, padj_col] < padj_cutoff && gene_df[i, direction_col] > norm) {
-                            if (strand == "-") {
-                                change <- ifelse(start_min < gene_df[i, start_col], "shortening", "lengthening")
-                            } else {
-                                change <- ifelse(start_min < gene_df[i, start_col], "lengthening", "shortening")
-                            }
-                            break
-                        }
-                    }
-                }
-            }
         }
         # print(paste(gene, change))
         gene_df <- gene_df %>%
@@ -308,7 +262,7 @@ UTR_change <- function(df, gene_col = "gene_name", start_col = "start", strand_c
 }
 
 
-
+# Assign APA: S=consitutive, P=the most upstream site, D=all other sites
 APA_assign <- function(df, gene_col = "gene_name", start_col = "start", strand_col = "strand") {
     genes <- unique(df[[gene_col]])
     
@@ -349,6 +303,7 @@ APA_assign <- function(df, gene_col = "gene_name", start_col = "start", strand_c
 }
 
 
+# Detect PAS signal in the upstream of CS sites
 detect_PAS_signal <- function(BSgenome, gr, upstream = 100) {
     USR <- flank(gr, width = upstream, start = TRUE, both = FALSE, use.names = TRUE, ignore.strand = FALSE)
     seqUSR <- toupper(getSeq(BSgenome, USR, as.character = TRUE))
@@ -373,7 +328,9 @@ detect_PAS_signal <- function(BSgenome, gr, upstream = 100) {
 }
 
 
-
+# Write bed files of CS sites, separated bed files are produced for proximal/distal, 
+# shortening/lengthening sites, separated noChange bed files are produced for shortening 
+# and bed files, matching the number of sites and read count abundance of control group
 results_from_dexseq_relative <- function(factor = "siZNF281", dxrFile, outdir = NULL) {
     message("[results_from_dexseq_relative] output bed files ...")
     dxr <- read.delim2(dxrFile, header = TRUE) %>%
@@ -449,6 +406,7 @@ results_from_dexseq_relative <- function(factor = "siZNF281", dxrFile, outdir = 
     return(apa_gene_list)
 }
 
+# Miscellaneous function
 pd_distance <- function(p=c(1,2), d=c(3,4)){
     d <- round(mean(d)) - round(mean(p))
 }
