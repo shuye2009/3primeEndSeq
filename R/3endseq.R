@@ -747,6 +747,8 @@ distance_between_proximal_distal <- function(wd, cleavageFactor="gU2AF1",
     dev.off()
 }
 
+# identifying proximal CPA that are located in introns, and quantify distance between
+# CPA and 5'/3' splicing sites
 intronic_CPA <- function(wd, dxr_transcript_file){
     #print(getwd())
     #setwd(wd)
@@ -788,6 +790,10 @@ intronic_CPA <- function(wd, dxr_transcript_file){
    
    bedDir <- file.path(wd, "bed_output")
    bedfiles <- list.files(path=bedDir, pattern="\\.bed$")
+   
+   if(length(bedfiles[grepl("_proximal_cleavage_site_premature.bed"), bedfiles])>0){
+      return()
+   }
    
    # produce premature bed files
    filter_bedfile <- function(bedDir, bed, df, aname){
@@ -853,4 +859,59 @@ intronic_CPA <- function(wd, dxr_transcript_file){
          write.table(nc_lengthening, noChangeL_file, col.names = F, row.names = F, sep="\t", quote = F)
       }
    }
+   
+   return()
+}
+
+distance_to_splicing_sites <- function(premature_bed, resources, factor){
+   setwd("C:/GREENBLATT/Nujhat/3endseq/Jun04_2024/gU2AF1/Transcript/bed_output")
+   premature_bed <- paste0(factor, "_shortening_proximal_cleavage_site_premature.bed")
+   names(premature_bed) <- "premature"
+   bedimportParams <- setImportParams(
+      offset = 0, fix_width = 0, fix_point = "center", norm = FALSE,
+      useScore = FALSE, outRle = FALSE, useSizeFactor = FALSE, genome = unique(resources$txdb$user_genome)
+   )
+   bed_gr <- GenomicPlot::handle_bed(premature_bed, bedimportParams)$query
+   
+   intron_gr <- GenomicPlot::get_genomic_feature_coordinates(resources$txdb, 
+                                                             featureName = "intron",
+                                                             longest = FALSE,
+                                                             protein_coding = FALSE)
+   intron_gr <- intron_gr$GRanges
+   intron_overlapping <- filter_by_overlaps_stranded(bed_gr, intron_gr, ignore.order = FALSE)
+   nearest_intron <- intron_overlapping[nearest(bed_gr, intron_overlapping)]
+   
+   five_prime <- rep(0, length(bed_gr))
+   three_prime <- rep(0, length(bed_gr))
+   
+   distance_to_splice <- function(cpa, intron){
+      center <- floor((start(cpa)+end(cpa))/2)
+      stopifnot(as.vector(strand(cpa)) == as.vector(strand(intron)))
+      if(as.vector(strand(intron)) == "-"){
+         five <- center - end(intron)
+         three <- center - start(intron)
+      }else{
+         five <- start(intron) - center
+         three <- end(intron) - center
+      }
+      
+      if(five > 0){
+         print(paste("index", i))
+         print(five)
+         print(cpa)
+         print(intron)
+      }
+      return(c(five, three)) 
+   }
+   
+   for(i in seq_along(bed_gr)){
+      cpa <- bed_gr[i]
+      intron <- nearest_intron[i]
+      distances <- distance_to_splice(cpa, intron)
+      
+      five_prime[i] <- distances[1]
+      three_prime[i] <- distances[2]
+   }
+   
+   summary(five_prime)
 }
