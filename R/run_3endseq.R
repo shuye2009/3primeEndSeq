@@ -3,30 +3,23 @@
 options(error=recover)
 parallel:::setDefaultClusterOptions(setup_strategy = "sequential")
 
-args <- commandArgs(trailingOnly = TRUE)
-wd <- args[1] # wd <- "C:/GREENBLATT/Nujhat/3endseq/Jun04_2024"
-factor <- args[2] # "gU2AF1", "gU170K", "gSF1"
-option <- args[3]  # global, peak, read, other
-
-if (Sys.info()[["sysname"]] == "Windows") {
-   resources <- setupProjects(genome="hg19", 
-                              baseDir="C:/GREENBLATT",
-                              overwrite = FALSE)
-            
-   scriptdir <- "C:/GREENBLATT/Rscripts/3primeEndSeq/R"
-   #scriptdir <- dirname(rstudioapi::getSourceEditorContext()$path)
-}else{
-   source("~/R_script/misc_genomics_functions.R") 
-   resources <- setupProjects(genome="hg19", 
-                              baseDir="~",
-                              overwrite = FALSE) 
-   scriptdir <- "~/R_script/3endseq"
-}
+scriptdir <- "C:/GREENBLATT/Rscripts/3primeEndSeq/R"
 
 source(file.path(scriptdir,"misc_genomics_functions.R"))
 source(file.path(scriptdir,"3endseq_lib.R"))
 source(file.path(scriptdir,"3endseq.R"))
 
+resources <- setupProjects(genome="hg19", 
+                           baseDir="C:/GREENBLATT",
+                           overwrite = FALSE)
+
+args <- commandArgs(trailingOnly = TRUE)
+wd <- args[1] # wd <- "C:/GREENBLATT/Nujhat/3endseq/Jun04_2024"
+factor <- args[2] # "gU2AF1", "gU170K", "gSF1"
+option <- args[3]  # global, peak, read, other
+
+#if (Sys.info()[["sysname"]] == "Windows") {}
+   
   
 ## Process single nucleotide resolution cleavage (CPA) sites and internal priming sites,
 ## cluster CPA sites into consolidated CPA peaks,
@@ -201,7 +194,7 @@ if(option == "read"){
                stat1 <- c(-300, -100)
                stat2 <- NULL
            }else if(clipFactor %in% c("U1C", "SF3B4") && factor %in% c("gU2AF1")){
-               stat1 <- c(-300, -100)
+               stat1 <- c(-400, -200)
                stat2 <- c(-100, 100)
            }else {
                stat1 <- NULL
