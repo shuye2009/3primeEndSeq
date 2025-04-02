@@ -1,5 +1,38 @@
-
-
+#' Process 3' end sequencing data for a specific experimental factor
+#' 
+#' This function processes 3' end sequencing data for a specific experimental factor,
+#' generating metagene plots, analyzing nucleotide composition around cleavage sites,
+#' overlapping individual cleavage sites with clusters, and associating clusters with genes.
+#' 
+#' @param indir Character string, path to the input directory containing 3' end sequencing data files
+#' @param outdir Character string, path to the output directory where results will be saved
+#' @param factor Character string, the experimental factor being analyzed (e.g., "siNT", "siZNF281")
+#' @param metaData Character string, path to the metadata file containing sample information
+#' @param resources List containing reference data including:
+#'   \itemize{
+#'     \item gtffile: Path to GTF annotation file
+#'     \item txdb: TxDb object with transcript annotations
+#'     \item metaFeatures: GRangesList with meta-features for metagene plots
+#'     \item geneFeatures: GRangesList with gene features
+#'   }
+#' @param CScluster GRanges object containing cleavage site clusters
+#' 
+#' @return List containing processed cleavage site data:
+#'   \itemize{
+#'     \item count: Data frame with cleavage site counts per transcript
+#'     \item association: Data frame with cleavage site to gene associations
+#'     \item meta: Data frame with sample metadata
+#'   }
+#' 
+#' @details
+#' The function performs several analyses:
+#' 1. Generates metagene plots for cleavage sites (CS) and internal priming sites (IP)
+#' 2. Analyzes nucleotide composition around cleavage sites
+#' 3. Overlaps individual cleavage sites with cleavage site clusters
+#' 4. Calculates correlations between samples
+#' 5. Detects polyadenylation signals upstream of cleavage sites
+#' 6. Associates cleavage site clusters with genes
+#' 7. Analyzes the distribution of cleavage sites in different genomic regions
 process_factor <- function(indir, outdir, factor, metaData, resources, CScluster){
    print("[process_factor] started ...")
    setwd(outdir)
@@ -32,7 +65,20 @@ process_factor <- function(indir, outdir, factor, metaData, resources, CScluster
    
    op <- paste0(factor, "_3primeseq_CS_sites_5parts_metagene")
    if(!file.exists(paste0(op, ".pdf")))
-   df <- plot_5parts_metagene(CS_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA, smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
+   df <- plot_5parts_metagene(CS_files, 
+   gFeatures_list=list("meta"=metaFeatures), 
+   heatRange=NULL, 
+   inputFiles=NULL, 
+   scale=FALSE, 
+   verbose=TRUE, 
+   transform=NA, 
+   smooth=FALSE, 
+   stranded=TRUE, 
+   outPrefix=op, 
+   importParams=importParams, 
+   heatmap=TRUE, 
+   rmOutlier=0, 
+   nc=5)
    
    IP_files <- match_samples(path=indir, pattern="_IP.bed", 
                              samples=rownames(sampleData))
@@ -40,7 +86,20 @@ process_factor <- function(indir, outdir, factor, metaData, resources, CScluster
    
    op <- paste0(factor, "_3primeseq_IP_sites_5parts_metagene")
    if(!file.exists(paste0(op, ".pdf")))
-   df <- plot_5parts_metagene(IP_files, gFeatures_list=list("meta"=metaFeatures), heatRange=NULL, inputFiles=NULL, scale=FALSE, verbose=TRUE, transform=NA,  smooth=FALSE, stranded=TRUE, outPrefix=op, importParams=importParams, heatmap=TRUE, rmOutlier=0, nc=5)
+   df <- plot_5parts_metagene(IP_files, 
+   gFeatures_list=list("meta"=metaFeatures), 
+   heatRange=NULL, 
+   inputFiles=NULL, 
+   scale=FALSE, 
+   verbose=TRUE, 
+   transform=NA, 
+   smooth=FALSE, 
+   stranded=TRUE, 
+   outPrefix=op, 
+   importParams=importParams, 
+   heatmap=TRUE, 
+   rmOutlier=0, 
+   nc=5)
    
    
    ### count polyT length ####
@@ -198,9 +257,50 @@ process_factor <- function(indir, outdir, factor, metaData, resources, CScluster
    return(cluster_res)
 }
  
-# Differential analysis of usage of CPA sites between treat and control
-# Identifying proximal and distal CPA
-# Define shortening and lengtheing genes based statistical significance
+#' Perform differential usage analysis of cleavage and polyadenylation (CPA) sites
+#' 
+#' This function analyzes differential usage of cleavage and polyadenylation (CPA) sites
+#' between treatment and control conditions using DEXSeq. It identifies proximal and distal
+#' CPA sites and determines genes with 3' UTR shortening or lengthening based on statistical significance.
+#' 
+#' @param cluster_res List containing processed cleavage site data from process_factor function:
+#'   \itemize{
+#'     \item count: Data frame with cleavage site counts per transcript
+#'     \item association: Data frame with cleavage site to gene associations
+#'     \item meta: Data frame with sample metadata
+#'   }
+#' @param outdir Character string, path to the output directory where results will be saved
+#' @param feature Character string, genomic feature to analyze, one of:
+#'   \itemize{
+#'     \item "3UTR": 3' UTR and transcription termination site regions
+#'     \item "Intron": Intronic regions
+#'     \item "Transcript": All transcript regions
+#'   }
+#' @param factor Character string, the experimental factor being analyzed (e.g., "siZNF281")
+#' 
+#' @return No explicit return value, but generates multiple output files:
+#'   \itemize{
+#'     \item APA_results.tab: Results from Fisher's exact test-based APA analysis
+#'     \item DEXSeq_results.tab: Results from DEXSeq analysis
+#'     \item DEXSeq_results_annotated.tab: Annotated DEXSeq results with PAS status
+#'     \item confusion_matrix.tab: Comparison of APA and DEXSeq results
+#'     \item combined_results.tab: Combined results from both analyses
+#'     \item discrepancy.tab: Cases where APA and DEXSeq analyses disagree
+#'     \item Various plots and BED files for visualization and further analysis
+#'   }
+#' 
+#' @details
+#' The function performs two complementary analyses:
+#' 1. Fisher's exact test-based analysis of relative cleavage efficiency (RCE)
+#' 2. DEXSeq-based differential exon usage analysis
+#' 
+#' Both approaches identify genes with alternative polyadenylation leading to 3' UTR
+#' shortening or lengthening. The results are compared and combined for comprehensive analysis.
+#' The function also generates BED files for different categories of cleavage sites
+#' (proximal/distal, shortening/lengthening) for visualization and further analysis.
+#' 
+#' Polyadenylation signals (PAS) are detected upstream of cleavage sites and their
+#' distribution is analyzed in relation to read counts.
 DEXSeq_analysis <- function(cluster_res, outdir, feature, factor){   
    tx_cluster_count <- cluster_res$count
    tx_gene_association <- cluster_res$association
@@ -378,9 +478,39 @@ DEXSeq_analysis <- function(cluster_res, outdir, feature, factor){
    message("[DEXseq analysis] finished ...")
 }
 
-# display raw cleavage sites and internal priming sites with respect to 3'UTR,
-# cluster raw cleavage sites into consolidated cleavage site peaks
-
+#' Process global 3' end sequencing data and cluster cleavage sites
+#' 
+#' This function processes raw cleavage sites (CS) and internal priming sites (IP)
+#' from 3' end sequencing data, displays their distribution with respect to 3' UTR regions,
+#' and clusters raw cleavage sites into consolidated cleavage site peaks.
+#' 
+#' @param indir Character string, path to the input directory containing merged CS and IP bed files
+#' @param outdir Character string, path to the output directory where results will be saved
+#' @param resources List containing reference data including:
+#'   \itemize{
+#'     \item gtffile: Path to GTF annotation file
+#'     \item txdb: TxDb object with transcript annotations
+#'     \item metaFeatures: GRangesList with meta-features for metagene plots
+#'     \item geneFeatures: GRangesList with gene features
+#'   }
+#' 
+#' @return GRanges object containing the clustered cleavage sites with metadata including:
+#'   \itemize{
+#'     \item status: Indicates whether a site was "kept", "eliminated", or "added" during clustering
+#'     \item score: Read count for each cleavage site
+#'   }
+#' 
+#' @details
+#' The function performs several analyses:
+#' 1. Generates metagene plots for merged cleavage sites and internal priming sites
+#' 2. Creates plots showing the distribution of sites around 3' UTR regions
+#' 3. Clusters individual cleavage sites into peaks using the CS2peak function
+#' 4. Analyzes the distribution of read counts across different types of sites
+#' 
+#' The function expects merged CS and IP bed files in the input directory, which are
+#' typically generated by the 3endseq_pipeline.sh script. The clustering process
+#' identifies the most reliable cleavage sites by merging nearby sites and eliminating
+#' low-confidence sites.
 process_global <- function(indir, outdir, resources=resources){
    setwd(outdir)
    
@@ -454,7 +584,22 @@ process_global <- function(indir, outdir, resources=resources){
    return(res)
 }
 
-# Plot iCLIP peaks around priximal and distal CPA sites of shortening and lengthening genes
+#' Plot iCLIP peaks around proximal and distal CPA sites of shortening and lengthening genes
+#' 
+#' This function plots iCLIP peaks around proximal and distal CPA sites of shortening and lengthening genes.
+#' 
+#' @param clipDir Character string, path to the directory containing iCLIP bed files
+#' @param wd Character string, path to the working directory
+#' @param clipFactor Character string, name of the iCLIP factor
+#' @param cleavageFactor Character string, name of the cleavage factor
+#' @param feature Character string, genomic feature to analyze, one of:
+#'   \itemize{
+#'     \item "3UTR": 3' UTR and transcription termination site regions
+#'     \item "Intron": Intronic regions
+#'     \item "Transcript": All transcript regions
+#'   }
+#' 
+#' @return No explicit return value, but generates a PDF plot of iCLIP peaks around CPA sites
 integrate_3endseq_with_iCLIP <- function(clipDir, wd, clipFactor = "U2AF1", 
                                          cleavageFactor="gU2AF1", feature="3UTR"){
    clipbed <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactor)
@@ -506,7 +651,22 @@ integrate_3endseq_with_iCLIP <- function(clipDir, wd, clipFactor = "U2AF1",
    }
 }
 
-# Plot iCLIP reads around priximal and distal CPA sites of shortening and lengthening genes
+#' Plot iCLIP reads around proximal and distal CPA sites of shortening and lengthening genes
+#' 
+#' This function plots iCLIP reads around proximal and distal CPA sites of shortening and lengthening genes.
+#' 
+#' @param clipDir Character string, path to the directory containing iCLIP bam files
+#' @param wd Character string, path to the working directory
+#' @param clipFactor Character string, name of the iCLIP factor
+#' @param cleavageFactor Character string, name of the cleavage factor
+#' @param feature Character string, genomic feature to analyze, one of:
+#'   \itemize{
+#'     \item "3UTR": 3' UTR and transcription termination site regions
+#'     \item "Intron": Intronic regions
+#'     \item "Transcript": All transcript regions
+#'   }
+#' 
+#' @return No explicit return value, but generates a PDF plot of iCLIP reads around CPA sites
 integrate_3endseq_with_iCLIP_bam <- function(clipDir, wd, clipFactor = "U2AF1", 
                                          cleavageFactor="gU2AF1", feature="3UTR",
                                          lh_list, ext_list){
@@ -603,7 +763,16 @@ integrate_3endseq_with_iCLIP_bam <- function(clipDir, wd, clipFactor = "U2AF1",
     }
 }
 
-#Plot iCLIP peaks with respect to intron
+#' Plot iCLIP peaks with respect to intron
+#' 
+#' This function plots iCLIP peaks with respect to intron regions.
+#' 
+#' @param clipDir Character string, path to the directory containing iCLIP bed files
+#' @param outDir Character string, path to the working directory
+#' @param clipFactors Character vector, names of iCLIP factors
+#' @param txdb TxDb object with transcript annotations
+#' 
+#' @return No explicit return value, but generates a PDF plot of iCLIP peaks with respect to intron regions
 run_GenomicPlot_Intron <- function(clipDir, outDir, clipFactors, txdb){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", 
                               samples=clipFactors, start = FALSE)
@@ -638,7 +807,16 @@ run_GenomicPlot_Intron <- function(clipDir, outDir, clipFactors, txdb){
    
 }
 
-#Plot iCLIP peaks with respect to gene features other than intron
+#' Plot iCLIP peaks with respect to gene features other than intron
+#' 
+#' This function plots iCLIP peaks with respect to gene features other than intron regions.
+#' 
+#' @param clipDir Character string, path to the directory containing iCLIP bed files
+#' @param outDir Character string, path to the working directory
+#' @param clipFactors Character vector, names of iCLIP factors
+#' @param metaFeature Character string, name of the gene feature to analyze
+#' 
+#' @return No explicit return value, but generates a PDF plot of iCLIP peaks with respect to gene features other than intron
 run_GenomicPlot_metagene <- function(clipDir, outDir, clipFactors, metaFeature){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactors)
    names(peakfiles) <- clipFactors
@@ -666,7 +844,16 @@ run_GenomicPlot_metagene <- function(clipDir, outDir, clipFactors, metaFeature){
    )
 }
 
-#Plot iCLIP peaks annotation statistics
+#' Plot iCLIP peaks annotation statistics
+#' 
+#' This function plots iCLIP peaks annotation statistics.
+#' 
+#' @param clipDir Character string, path to the directory containing iCLIP bed files
+#' @param outDir Character string, path to the working directory
+#' @param clipFactors Character vector, names of iCLIP factors
+#' @param gtfFile Character string, path to the GTF file
+#' 
+#' @return No explicit return value, but generates a PDF plot of iCLIP peaks annotation statistics
 run_GenomicPlot_peak_annotation <- function(clipDir, outDir, clipFactors, gtfFile){
    peakfiles <- match_samples(path=clipDir, pattern="\\.bed$", samples=clipFactors)
    names(peakfiles) <- clipFactors
@@ -689,7 +876,16 @@ run_GenomicPlot_peak_annotation <- function(clipDir, outDir, clipFactors, gtfFil
    )
 }
 
-# quantitate distance between proximal and distal CPA sites in shortening and lengthening genes
+#' Quantitate distance between proximal and distal CPA sites in shortening and lengthening genes
+#' 
+#' This function quantitates the distance between proximal and distal CPA sites in shortening and lengthening genes.
+#' 
+#' @param wd Character string, path to the working directory
+#' @param cleavageFactor Character string, name of the cleavage factor
+#' @param feature Character string, name of the gene feature
+#' @param nc Character string, name of the no change condition
+#' 
+#' @return A list of distances between proximal and distal CPA sites in shortening and lengthening genes
 distance_between_proximal_distal <- function(wd, cleavageFactor="gU2AF1", 
                                              feature="3UTR", nc="noChange_"){
     setwd(file.path(wd, cleavageFactor, feature, "bed_output"))
@@ -747,6 +943,14 @@ distance_between_proximal_distal <- function(wd, cleavageFactor="gU2AF1",
     dev.off()
 }
 
+#' Identify intronic cleavage sites
+#' 
+#' This function identifies intronic cleavage sites from a transcript file.
+#' 
+#' @param wd Character string, path to the working directory
+#' @param dxr_transcript_file Character string, name of the transcript file
+#' 
+#' @return A data frame of intronic cleavage sites
 intronic_CPA <- function(wd, dxr_transcript_file){
     #print(getwd())
     #setwd(wd)

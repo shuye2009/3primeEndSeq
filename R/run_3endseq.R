@@ -156,9 +156,7 @@ if(option == "read"){
    
    # Dec19, 2024
    #For U1C with gU170K premature CPA: Plot window +/-500bp around both cleavage sites and statistical tests for -300 to -100. 
-   
    #For SF3B4 with gSF1 premature CPA: Plot window +/-500bp around both cleavage sites and statistical tests for -100 to +100.
-   
    #Could you also generate plots for U1C CLIP around the gSF1 premature CPA events, and SF3B4 around the gU170K premature events. Window can be +/-500 bp for both proximal and distal. Region for stats can be arbitrary for now.
    #
    #

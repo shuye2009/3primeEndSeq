@@ -1,4 +1,13 @@
-# find files by regex
+#' Find files by regex pattern
+#' 
+#' This function searches for files in a specified directory that match a regex pattern
+#' and filters them based on a list of sample names.
+#' 
+#' @param path Character string specifying the directory path to search in
+#' @param pattern Character string specifying the regex pattern for file filtering
+#' @param samples Vector of character strings with sample names to match
+#' @param start Logical, if TRUE prepends "^" to each sample name for exact start matching (default: FALSE)
+#' @return Named vector of file paths that match the criteria
 match_samples <- function(path, pattern, samples, start=FALSE){
     
     queryfiles <- list.files(path=path, pattern=pattern)
@@ -14,7 +23,16 @@ match_samples <- function(path, pattern, samples, start=FALSE){
 }
 
 
-## define cluster of CS
+#' Define clusters of cleavage sites (CS)
+#' 
+#' This function clusters cleavage sites based on their genomic proximity.
+#' It processes a GRanges object containing cleavage sites and groups them
+#' into clusters based on specified distance parameters.
+#' 
+#' @param CSgr GRanges object containing cleavage sites
+#' @param separatingDist Numeric, minimum distance in bp to separate clusters (default: 75)
+#' @param addonDist Numeric, distance threshold in bp to merge sites into existing clusters (default: 5)
+#' @return GRanges object with clustered cleavage sites
 CS2peak <- function(CSgr, separatingDist = 75, addonDist = 5) {
     CSgr <- sortSeqlevels(CSgr)
     CSgrl <- split(CSgr, paste(seqnames(CSgr), strand(CSgr)))
@@ -34,9 +52,15 @@ CS2peak <- function(CSgr, separatingDist = 75, addonDist = 5) {
 }
 
 
-
-## cluster on each chromosome
-## based on Rot et al., 2017, Cell Reports 19, 1056–1067, May 2, 2017
+#' Cluster cleavage sites on a single chromosome
+#' 
+#' This function processes cleavage sites on a single chromosome and clusters them
+#' based on proximity. It is based on the method from Rot et al., 2017, Cell Reports 19, 1056–1067.
+#' 
+#' @param CHRgr GRanges object containing cleavage sites from a single chromosome
+#' @param separatingDist Numeric, minimum distance in bp to separate clusters (default: 75)
+#' @param addonDist Numeric, distance threshold in bp to merge sites into existing clusters (default: 5)
+#' @return GRanges object with clustered cleavage sites for the chromosome, or NULL if input is empty
 CS2peakChr <- function(CHRgr, separatingDist = 75, addonDist = 5) {
     if (length(CHRgr) == 0) {
         return(NULL)
@@ -80,7 +104,13 @@ CS2peakChr <- function(CHRgr, separatingDist = 75, addonDist = 5) {
     return(CHRgr)
 }
 
-#Plot CS width distribution as a histogram
+#' Plot cleavage site width distribution as a histogram
+#' 
+#' This function reads a BED file containing cleavage sites and plots
+#' the distribution of their widths as a histogram.
+#' 
+#' @param CSbed Character string, path to the BED file containing cleavage sites
+#' @return Histogram object showing the distribution of cleavage site widths
 explore_CS <- function(CSbed) {
     cs_df <- read.delim(CSbed, header = FALSE)
     colnames(cs_df) <- c("chr", "start", "end", "id", "score", "strand")
@@ -91,9 +121,14 @@ explore_CS <- function(CSbed) {
     h <- hist(cs_df$width, breaks = brks)
 }
 
-# fa <- "C:/GREENBLATT/Nujhat/3endseq/Dec21_2022/Greenblatt_001_Plate_1_Strip_1_A01_siNT_1_S1_filtered_flankL20.fa"
-# ch <- "T"
-# Plot occurrence of each nucleotide in the vicinity of CS sites
+#' Analyze nucleotide occurrence in FASTA sequences
+#' 
+#' This function analyzes the occurrence of a specific nucleotide in sequences from a FASTA file,
+#' typically used to examine the sequence context around cleavage sites.
+#' 
+#' @param fa Character string, path to the FASTA file
+#' @param ch Character, the nucleotide to count (e.g., "T")
+#' @return Histogram showing the distribution of the specified nucleotide's occurrences
 character_occurance_fasta <- function(fa, ch) {
     library(stringr)
     library(seqinr)
@@ -111,7 +146,16 @@ character_occurance_fasta <- function(fa, ch) {
     print(hist(counts_char, breaks = breaks, xlab = paste("Occurance of", ch), ylab = "Number of reads", main = names(fa)))
 }
 
-# calculate relative cleavage/polyadenylation efficiency
+#' Calculate Relative Cleavage Efficiency (RCE)
+#' 
+#' This function calculates the relative cleavage efficiency between control and experimental
+#' conditions for cleavage sites, using Fisher's exact test for statistical significance.
+#' 
+#' @param count_df Data frame containing count data for cleavage sites
+#' @param ctl_col Column name in count_df containing control counts
+#' @param exp_col Column name in count_df containing experimental counts
+#' @param RCE_cutoff Numeric, minimum mean RCE to include in results (default: 0.02)
+#' @return Data frame with RCE values and statistical test results
 cal_RCE <- function(count_df, ctl_col, exp_col, RCE_cutoff = 0.02) {
     cl <- start_parallel(nc = 20)
     clusterEvalQ(cl, expr = library(dplyr))
@@ -153,7 +197,21 @@ cal_RCE <- function(count_df, ctl_col, exp_col, RCE_cutoff = 0.02) {
     invisible(res)
 }
 
-# determine proximal/distal pair and determine shortening/lengthening for Fisher method and Dexseq method
+#' Determine UTR length changes between conditions
+#' 
+#' This function analyzes alternative polyadenylation (APA) events to determine
+#' if genes show 3' UTR shortening or lengthening between conditions.
+#' 
+#' @param df Data frame containing RCE and statistical data for cleavage sites
+#' @param gene_col Column name in df containing gene identifiers (default: "gene_name")
+#' @param start_col Column name in df containing genomic start positions (default: "start")
+#' @param strand_col Column name in df containing strand information (default: "strand")
+#' @param sorting_col Column name in df for sorting sites (default: "RCE_mean")
+#' @param padj_col Column name in df containing adjusted p-values (default: "fisherPadj")
+#' @param direction_col Column name in df containing fold change direction (default: "RCE_foldChange")
+#' @param padj_cutoff Numeric, significance threshold for adjusted p-values (default: 0.1)
+#' @param norm Numeric, normalization factor for fold change (default: 1)
+#' @return Data frame with UTR change annotations for each cleavage site
 UTR_change <- function(df, gene_col = "gene_name", start_col = "start", strand_col = "strand", sorting_col = "RCE_mean", padj_col = "fisherPadj", direction_col = "RCE_foldChange", padj_cutoff = 0.1, norm = 1) {
     genes <- unique(df[[gene_col]])
     
@@ -262,7 +320,18 @@ UTR_change <- function(df, gene_col = "gene_name", start_col = "start", strand_c
 }
 
 
-# Assign APA: S=consitutive, P=the most upstream site, D=all other sites
+#' Assign Alternative Polyadenylation (APA) site types
+#' 
+#' This function assigns APA site types to cleavage sites:
+#' S = constitutive (single site per gene)
+#' P = proximal (most upstream site)
+#' D = distal (all other sites, numbered from upstream to downstream)
+#' 
+#' @param df Data frame containing cleavage site information
+#' @param gene_col Column name in df containing gene identifiers (default: "gene_name")
+#' @param start_col Column name in df containing genomic start positions (default: "start")
+#' @param strand_col Column name in df containing strand information (default: "strand")
+#' @return Data frame with APA site type annotations for each cleavage site
 APA_assign <- function(df, gene_col = "gene_name", start_col = "start", strand_col = "strand") {
     genes <- unique(df[[gene_col]])
     
@@ -303,7 +372,15 @@ APA_assign <- function(df, gene_col = "gene_name", start_col = "start", strand_c
 }
 
 
-# Detect PAS signal in the upstream of CS sites
+#' Detect polyadenylation signals (PAS) upstream of cleavage sites
+#' 
+#' This function identifies canonical and non-canonical polyadenylation signals
+#' in the upstream region of cleavage sites.
+#' 
+#' @param BSgenome BSgenome object containing the reference genome
+#' @param gr GRanges object containing cleavage sites
+#' @param upstream Numeric, length of upstream region to search for PAS (default: 100)
+#' @return GRanges object with PAS status annotations (PAS_strong, PAS_weak, or PAS_less)
 detect_PAS_signal <- function(BSgenome, gr, upstream = 100) {
     USR <- flank(gr, width = upstream, start = TRUE, both = FALSE, use.names = TRUE, ignore.strand = FALSE)
     seqUSR <- toupper(getSeq(BSgenome, USR, as.character = TRUE))
@@ -328,9 +405,16 @@ detect_PAS_signal <- function(BSgenome, gr, upstream = 100) {
 }
 
 
-# Write bed files of CS sites, separated bed files are produced for proximal/distal, 
-# shortening/lengthening sites, separated noChange bed files are produced for shortening 
-# and bed files, matching the number of sites and read count abundance of control group
+#' Process DEXSeq results and create BED files for different APA categories
+#' 
+#' This function processes DEXSeq differential expression results for APA analysis
+#' and creates BED files for different categories of cleavage sites (proximal/distal,
+#' shortening/lengthening, etc.).
+#' 
+#' @param factor Character string, experimental factor name (default: "siZNF281")
+#' @param dxrFile Character string, path to DEXSeq results file
+#' @param outdir Character string, output directory for BED files (default: NULL)
+#' @return List of gene IDs categorized by APA change (shortening, lengthening, stable)
 results_from_dexseq_relative <- function(factor = "siZNF281", dxrFile, outdir = NULL) {
     message("[results_from_dexseq_relative] output bed files ...")
     dxr <- read.delim2(dxrFile, header = TRUE) %>%
@@ -394,10 +478,9 @@ results_from_dexseq_relative <- function(factor = "siZNF281", dxrFile, outdir = 
             }
         }
     }
-    df <- dxr %>%
-        filter(!grepl("S", APA)) %>%
-        select(groupID, change) %>%
-        distinct()
+    
+    df <- dxr
+    
     apa_gene_list <- list(
         shortening = df[df$change == "shortening", "groupID"],
         lengthening = df[df$change == "lengthening", "groupID"],
@@ -406,7 +489,20 @@ results_from_dexseq_relative <- function(factor = "siZNF281", dxrFile, outdir = 
     return(apa_gene_list)
 }
 
-# Miscellaneous function
+#' Calculate distance between proximal and distal sites
+#' 
+#' This function calculates the distance between proximal and distal cleavage sites.
+#' 
+#' @param p Numeric vector, positions of proximal sites
+#' @param d Numeric vector, positions of distal sites
+#' @return Numeric, average distance between proximal and distal sites
+#' Calculate average distance between proximal and distal sites
+#'
+#' This function calculates the average distance between proximal and distal cleavage sites.
+#'
+#' @param p Numeric vector, positions of proximal sites
+#' @param d Numeric vector, positions of distal sites
+#' @return Numeric, average distance between proximal and distal sites
 pd_distance <- function(p=c(1,2), d=c(3,4)){
     d <- round(mean(d)) - round(mean(p))
 }
